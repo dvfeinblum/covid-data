@@ -11,6 +11,7 @@ class PlotBuilder:
     def __init__(self):
         self.run_date = datetime.now()
         self.data = {}
+        self.data_rolling = {}
         self.region_list = ["nationwide", "northeast", "west", "south"]
         self.fig = plt.figure()
 
@@ -28,6 +29,15 @@ class PlotBuilder:
         )
         self.data[region] = region_data
 
+        region_data_rolling = self.data_rolling.get(region, [])
+        region_data_rolling.append(
+            (
+                datetime.strptime(row["date"], "%Y-%m-%d").date(),
+                float(row["eff_conc_sarscov2_weekly_rolling"]),
+            )
+        )
+        self.data_rolling[region] = region_data_rolling
+
     def plot(self, region, smooth):
         """
         For now, print the data either directly or smoothed.
@@ -40,9 +50,7 @@ class PlotBuilder:
                 if smooth:
                     y = gaussian_filter1d(y, sigma=2)
                 if reg == "nationwide":
-                    axes.plot(
-                        x, y, label=reg, c="black", linestyle="dashed", linewidth=2
-                    )
+                    axes.plot(x, y, label=reg, c="black", linewidth=2)
                 else:
                     axes.plot(x, y, label=reg)
 
@@ -66,10 +74,10 @@ def fetch_latest_data():
     today = datetime.today()
 
     # only bother looking for new data on tuesday
-    if today.weekday() == 1:
-        file_date = (today - timedelta(days=1)).strftime("%Y-%m-%d")
+    if today.weekday() == 0:
+        file_date = today.strftime("%Y-%m-%d")
         # use a+ so we don't overwrite but get a new file if the lock DNE
-        with open("/biobot/.biobot.lock", "a+") as f:
+        with open("biobot/.biobot.lock", "a+") as f:
             # seek first since, if file exists, we'll be at the end
             f.seek(0)
             last_updated = f.read()
