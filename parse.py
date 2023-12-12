@@ -38,26 +38,35 @@ class PlotBuilder:
         )
         self.data_rolling[region] = region_data_rolling
 
-    def plot(self, region, smooth):
+    def plot(self, args):
         """
         For now, print the data either directly or smoothed.
         """
+        region = args.region
+        smooth = args.smooth
+        rolling = args.rolling
         axes = self.fig.add_subplot()
         if not region:
             # reverse order so nationwide is on top
             for reg in self.region_list[::-1]:
-                x, y = zip(*self.data[reg])
-                if smooth:
-                    y = gaussian_filter1d(y, sigma=2)
+                if rolling:
+                    x, y = zip(*self.data_rolling[reg])
+                else:
+                    x, y = zip(*self.data[reg])
+                    if smooth:
+                        y = gaussian_filter1d(y, sigma=2)
                 if reg == "nationwide":
                     axes.plot(x, y, label=reg, c="black", linewidth=2)
                 else:
                     axes.plot(x, y, label=reg)
 
         else:
-            x, y = zip(*self.data[region])
-            if smooth:
-                y = gaussian_filter1d(y, sigma=2)
+            if rolling:
+                x, y = zip(*self.data_rolling[region])
+            else:
+                x, y = zip(*self.data[region])
+                if smooth:
+                    y = gaussian_filter1d(y, sigma=2)
             axes.plot(x, y, label=region)
         plt.legend(loc="upper left")
         plt.show()
@@ -80,8 +89,7 @@ def fetch_latest_data():
         with open("biobot/.biobot.lock", "a+") as f:
             # seek first since, if file exists, we'll be at the end
             f.seek(0)
-            last_updated = f.read()
-
+            last_updated = f.read().strip()
             if last_updated != file_date:
                 print("biobot data is stale; fetching new data.")
                 file_url = f"https://d1t7q96h7r5kqm.cloudfront.net/{file_date}_automated_csvs/wastewater_by_census_region_nationwide.csv"
@@ -131,7 +139,8 @@ if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("--region")
     parser.add_argument("--smooth", type=bool)
+    parser.add_argument("--rolling", type=bool)
     args = parser.parse_args()
 
     plot_builder = parse_csv()
-    plot_builder.plot(args.region, args.smooth)
+    plot_builder.plot(args)
