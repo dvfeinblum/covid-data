@@ -4,11 +4,11 @@ from datetime import datetime
 
 import requests
 
-from constants import REGIONS, TIMESCALES
-from plot_builder import PlotBuilder
+from constants import DIMENSIONS, REGIONS, TIMESCALES
+from plot_builder import BiobotPlotBuilder, CDCHospitalizationsPlotBuilder
 
 
-def fetch_latest_data():
+def fetch_latest_biobot_data():
     """
     Biobot uploads new data on mondays. We check the lock file
     to see when we last fetched data. If it's tuesday, try fetching
@@ -48,25 +48,27 @@ def fetch_latest_data():
                 f.write(file_date)
 
 
-def parse_csv(args: ArgumentParser) -> PlotBuilder:
+def parse_biobot(args: ArgumentParser) -> BiobotPlotBuilder:
     """
-    Parses Biobot csv and instantiates PlotBuilder object for
+    Parses Biobot csv and instantiates BiobotPlotBuilder object for
     plot building.
     """
-    fetch_latest_data()
+    fetch_latest_biobot_data()
     with open("biobot/wastewater_by_census_region_nationwide.csv") as f:
-        """
-        Rows are of the form
-        {
-            'date': '2020-03-18',
-            'display_name': 'Nationwide',
-            'eff_conc_sarscov2_weekly': '99.58647478625',
-            'eff_conc_sarscov2_weekly_rolling': '158.9905916924097'
-        }
-        """
-        plot_builder = PlotBuilder(args)
+        plot_builder = BiobotPlotBuilder(args)
         for row in csv.DictReader(f):
             plot_builder.parse_row(row)
+
+    return plot_builder
+
+
+def parse_cdc(args: ArgumentParser) -> CDCHospitalizationsPlotBuilder:
+    with open("cdc/weekly_hospitalizations.csv") as f:
+        plot_builder = CDCHospitalizationsPlotBuilder(args)
+        for row in csv.DictReader(f):
+            # temporary
+            if row["State"] == "COVID-NET":
+                plot_builder.parse_row(row)
 
     return plot_builder
 
@@ -77,5 +79,6 @@ def build_arg_parser():
     parser.add_argument("--smooth", action="store_true", required=False)
     parser.add_argument("--rolling", action="store_true", required=False)
     parser.add_argument("--timescale", required=False, type=str, choices=TIMESCALES)
+    parser.add_argument("--dimension", type=str, choices=DIMENSIONS)
 
     return parser

@@ -1,13 +1,15 @@
+from abc import ABC, abstractmethod
 from datetime import datetime
 
 from dateutil.relativedelta import relativedelta
 import matplotlib.pyplot as plt
+from matplotlib.axes import Axes
 from scipy.ndimage import gaussian_filter1d
 
-from constants import YEAR, SIX_MONTHS, REGIONS
+from constants import NATIONWIDE, REGIONS, SIX_MONTHS, YEAR
 
 
-class PlotBuilder:
+class PlotBuilder(ABC):
     def __init__(self, args):
         self.data = {}
         self.data_rolling = {}
@@ -15,9 +17,61 @@ class PlotBuilder:
         self.args = args
         self.run_date = datetime.today().date()
 
-    def parse_row(self, row):
+    @abstractmethod
+    def parse_row(self, row: str):
+        pass
+
+    @abstractmethod
+    def produce_data(self):
+        pass
+
+    def plot(self):
         """
-        Chop csv row up across regions and store as (datetime, float) pairs
+        For now, print the data either directly or smoothed.
+        """
+        axes = self.fig.add_subplot()
+        self.produce_data(axes)
+        plt.legend(loc="upper right")
+        plt.show()
+
+
+class BiobotPlotBuilder(PlotBuilder):
+    def produce_data(self, axes: Axes):
+        region = self.args.region
+        smooth = self.args.smooth
+        rolling = self.args.rolling
+        if not region:
+            # reverse order so nationwide is on top
+            for reg in REGIONS[::-1]:
+                if rolling:
+                    x, y = zip(*self.data_rolling[reg])
+                else:
+                    x, y = zip(*self.data[reg])
+                    if smooth:
+                        y = gaussian_filter1d(y, sigma=2)
+                if reg == "nationwide":
+                    axes.plot(x, y, label=reg, c="black", linewidth=2)
+                else:
+                    axes.plot(x, y, label=reg)
+
+        else:
+            if rolling:
+                x, y = zip(*self.data_rolling[region])
+            else:
+                x, y = zip(*self.data[region])
+                if smooth:
+                    y = gaussian_filter1d(y, sigma=2)
+            axes.plot(x, y, label=region)
+
+    def parse_row(self, row: str):
+        """
+        Rows are of the form
+        {
+            'date': '2020-03-18',
+            'display_name': 'Nationwide',
+            'eff_conc_sarscov2_weekly': '99.58647478625',
+            'eff_conc_sarscov2_weekly_rolling': '158.9905916924097'
+        }
         """
         region = row["display_name"].lower()
         region_data = self.data.get(region, [])
@@ -46,35 +100,32 @@ class PlotBuilder:
         )
         self.data_rolling[region] = region_data_rolling
 
-    def plot(self):
-        """
-        For now, print the data either directly or smoothed.
-        """
-        region = self.args.region
-        smooth = self.args.smooth
-        rolling = self.args.rolling
-        axes = self.fig.add_subplot()
-        if not region:
-            # reverse order so nationwide is on top
-            for reg in REGIONS[::-1]:
-                if rolling:
-                    x, y = zip(*self.data_rolling[reg])
-                else:
-                    x, y = zip(*self.data[reg])
-                    if smooth:
-                        y = gaussian_filter1d(y, sigma=2)
-                if reg == "nationwide":
-                    axes.plot(x, y, label=reg, c="black", linewidth=2)
-                else:
-                    axes.plot(x, y, label=reg)
 
-        else:
-            if rolling:
-                x, y = zip(*self.data_rolling[region])
-            else:
-                x, y = zip(*self.data[region])
-                if smooth:
-                    y = gaussian_filter1d(y, sigma=2)
-            axes.plot(x, y, label=region)
-        plt.legend(loc="upper right")
-        plt.show()
+class CDCHospitalizationsPlotBuilder(PlotBuilder):
+    def parse_row(self, row: str):
+        """
+        Rows are of the form:
+        {
+            'State': 'New Mexico',
+            'Season': '2019-20',
+            'Week ending date': '03/28/2020 12:00:00 AM',
+            'Age Category': '0-4 years',
+            'Sex': 'All',
+            'Race': 'All',
+            'Rate': '0',
+            'Cumulative Rate': '0'}
+        """
+        region_data = self.data.get(NATIONWIDE, [])
+        region_data.append(
+            (
+                datetime.strptime(
+                    row["Week ending date"], "%m/%d/%Y %H:%M:%S %p"
+                ).date(),
+                float(row["Rate"]),
+            )
+        )
+        self.data[NATIONWIDE] = region_data
+
+    def produce_data(self, axes: Axes):
+        x, y = zip(*self.data[NATIONWIDE])
+        axes.plot(x, y, label=NATIONWIDE)
