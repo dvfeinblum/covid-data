@@ -26,9 +26,6 @@ class PlotBuilder(ABC):
         pass
 
     def plot(self):
-        """
-        For now, print the data either directly or smoothed.
-        """
         axes = self.fig.add_subplot()
         self.produce_data(axes)
         plt.legend(loc="upper right")
@@ -128,4 +125,4 @@ class CDCHospitalizationsPlotBuilder(PlotBuilder):
 
     def produce_data(self, axes: Axes):
         x, y = zip(*self.data[NATIONWIDE])
-        axes.plot(x, y, label=NATIONWIDE)
+        axes.bar(x, y, label=NATIONWIDE, width=7)
