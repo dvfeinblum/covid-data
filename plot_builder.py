@@ -126,3 +126,25 @@ class CDCHospitalizationsPlotBuilder(PlotBuilder):
     def produce_data(self, axes: Axes):
         x, y = zip(*self.data[NATIONWIDE])
         axes.bar(x, y, label=NATIONWIDE, width=7)
+
+
+class VerilyWastewaterPlotBuilder(PlotBuilder):
+    def parse_row(self, row: str):
+        """
+        Rows are of the form:
+        {
+            'date': '2019-02-12',
+            'avg_amt': '0'}
+        """
+        region_data = self.data.get(NATIONWIDE, [])
+        region_data.append(
+            (
+                datetime.strptime(row["date"], "%Y-%m-%d").date(),
+                float(row["avg_amt"]),
+            )
+        )
+        self.data[NATIONWIDE] = region_data
+
+    def produce_data(self, axes: Axes):
+        x, y = zip(*sorted(self.data[NATIONWIDE]))
+        axes.plot(x, y, label=NATIONWIDE)

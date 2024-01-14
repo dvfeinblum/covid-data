@@ -1,11 +1,8 @@
-from argparse import ArgumentParser
-import csv
+from csv import DictReader, DictWriter
 from datetime import datetime
+from functools import reduce
 
 import requests
-
-from constants import DIMENSIONS, REGIONS, TIMESCALES
-from plot_builder import BiobotPlotBuilder, CDCHospitalizationsPlotBuilder
 
 
 def fetch_latest_biobot_data():
@@ -48,37 +45,39 @@ def fetch_latest_biobot_data():
                 f.write(file_date)
 
 
-def parse_biobot(args: ArgumentParser) -> BiobotPlotBuilder:
+def nationalize_wastewater_scan():
     """
-    Parses Biobot csv and instantiates BiobotPlotBuilder object for
-    plot building.
+    wastewater scan data is a mess and is per site. rows are of the form
+    ['\ufeff"sample_id"',
+    "collection_date",
+    "bcov_recovery",
+    "bcov_recovery_lci",
+    "bcov_recovery_uci",
+    "city",
+    "state",
+    "name",
+    "site_name",
+    "sewershed_pop",
+    "state_abbr",
+    "N_Gene_gc_g_dry_weight",
+    'N_Gene_gc_g_dry_weight_lci',
+    'N_Gene_gc_g_dry_weight_uci']
     """
-    fetch_latest_biobot_data()
-    with open("biobot/wastewater_by_census_region_nationwide.csv") as f:
-        plot_builder = BiobotPlotBuilder(args)
-        for row in csv.DictReader(f):
-            plot_builder.parse_row(row)
+    simplified_data = {}
+    with open("wastewaterscan/WWSCAN_SARSCoV2_All_Wastewater_Sites_20240113.csv") as f:
+        for row in DictReader(f):
+            date_str = row["collection_date"]
+            date_set = simplified_data.get(date_str, [])
+            date_set.append(float(row["N_Gene_gc_g_dry_weight"]))
+            simplified_data[date_str] = date_set
 
-    return plot_builder
+    avg_per_day = []
+    for k, v in simplified_data.items():
+        avg_per_day.append(
+            {"date": k, "avg_amt": reduce(lambda x, y: x + y, v) / len(v)}
+        )
 
-
-def parse_cdc(args: ArgumentParser) -> CDCHospitalizationsPlotBuilder:
-    with open("cdc/weekly_hospitalizations.csv") as f:
-        plot_builder = CDCHospitalizationsPlotBuilder(args)
-        for row in csv.DictReader(f):
-            # temporary
-            if row["State"] == "COVID-NET":
-                plot_builder.parse_row(row)
-
-    return plot_builder
-
-
-def build_arg_parser():
-    parser = ArgumentParser()
-    parser.add_argument("--region", required=False, type=str, choices=REGIONS)
-    parser.add_argument("--smooth", action="store_true", required=False)
-    parser.add_argument("--rolling", action="store_true", required=False)
-    parser.add_argument("--timescale", required=False, type=str, choices=TIMESCALES)
-    parser.add_argument("--dimension", type=str, choices=DIMENSIONS)
-
-    return parser
+    with open("wastewaterscan/condensed.csv", "w") as g:
+        writer = DictWriter(g, fieldnames=list(avg_per_day[0].keys()))
+        writer.writeheader()
+        writer.writerows(avg_per_day)
